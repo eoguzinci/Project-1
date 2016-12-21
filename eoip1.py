@@ -187,15 +187,25 @@ index_lensort_left = np.argsort(line_size_L)
 inlen_slope_R = slope_right[index_lensort_right]
 inlen_slope_L = slope_left[index_lensort_left]
 
-threshold_length =3
+threshold_length = 3
 average_slope_R = inlen_slope_R[-threshold_length::].mean()
 average_slope_L = inlen_slope_L[-threshold_length::].mean()
 
-longest_2lines_index_L = index_lensort_left[-2:]
-longest_2lines_index_R = index_lensort_right[-2:]
+longest = 6
+longest_lines_index_L = index_lensort_left[-longest:]
+longest_lines_index_R = index_lensort_right[-longest:]
 
+longest_lines_R = lines_right[longest_lines_index_R]
+longest_lines_L = lines_left[longest_lines_index_L]
 
+longest_lines = np.concatenate((longest_lines_R, longest_lines_L), axis=0)
+sahpe = longest_lines.shape
+linnes = longest_lines.reshape(sahpe[0],1,sahpe[1])
+line_image = draw_lines(image, linnes)
 
+fig7 = plt.figure()
+plt.imshow(line_image)
+plt.savefig('longest_lines.png')
 ## Test on videos
 ## TO DO
 #
