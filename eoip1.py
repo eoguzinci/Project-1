@@ -106,6 +106,17 @@ def weighted_img(img, initial_img, α=0.8, β=1., λ=0.):
     """
     return cv2.addWeighted(initial_img, α, img, β, λ)
     
+def mask_pixels(x,y, vertices):
+    fit_top = np.polyfit((vertices[1][0], vertices[2][0]), (vertices[1][1], vertices[2][1]), 1)
+    fit_left = np.polyfit((vertices[0][0], vertices[1][0]), (vertices[0][1], vertices[1][1]), 1)
+    fit_right = np.polyfit((vertices[3][0], vertices[2][0]), (vertices[3][1], vertices[2][1]), 1)
+    fit_bottom = np.polyfit((vertices[0][0], vertices[3][0]), (vertices[0][1], vertices[3][1]), 1)
+    
+    XX, YY = np.meshgrid(np.arange(0, xsize), np.arange(0, ysize))
+    region_thresholds = (YY > (XX*fit_top[0] + fit_top[1])) & \
+                        (YY > (XX*fit_left[0] + fit_left[1])) & \
+                        (YY > (XX*fit_right[0] + fit_right[1])) & \
+                        (YY < (XX*fit_bottom[0] + fit_bottom[1]))    
 
 import os
 os.listdir("test_images/")
@@ -181,15 +192,16 @@ slope_left = slope[slope<0]
 line_size_R = line_size[slope>0]
 line_size_L = line_size[slope<0]
 
-# Average the slopes
+# Average the slopes & longest lines
 index_lensort_right = np.argsort(line_size_R) #be aware that this sorts ascending! 
 index_lensort_left = np.argsort(line_size_L)
 inlen_slope_R = slope_right[index_lensort_right]
 inlen_slope_L = slope_left[index_lensort_left]
 
-threshold_length = 3
+threshold_length = 6
 average_slope_R = inlen_slope_R[-threshold_length::].mean()
 average_slope_L = inlen_slope_L[-threshold_length::].mean()
+
 
 longest = 6
 longest_lines_index_L = index_lensort_left[-longest:]
@@ -197,15 +209,40 @@ longest_lines_index_R = index_lensort_right[-longest:]
 
 longest_lines_R = lines_right[longest_lines_index_R]
 longest_lines_L = lines_left[longest_lines_index_L]
+len_long_R = line_size_R[longest_lines_index_R]
+len_long_L = line_size_L[longest_lines_index_L]
 
-longest_lines = np.concatenate((longest_lines_R, longest_lines_L), axis=0)
-sahpe = longest_lines.shape
-linnes = longest_lines.reshape(sahpe[0],1,sahpe[1])
-line_image = draw_lines(image, linnes)
+# midpooints in L and R
+midpoint_R = np.zeros(2)
+midpoint_L = np.zeros(2)
+midpoint_R[0] = np.sum((longest_lines_R[:,0]+longest_lines_R[:,2])*len_long_R[:]/2)/np.sum(len_long_R[:])
+midpoint_R[1] = np.sum((longest_lines_R[:,1]+longest_lines_R[:,3])*len_long_R[:]/2)/np.sum(len_long_R[:])
+midpoint_L[0] = np.sum((longest_lines_L[:,0]+longest_lines_L[:,2])*len_long_L[:]/2)/np.sum(len_long_L[:])
+midpoint_L[1] = np.sum((longest_lines_L[:,1]+longest_lines_L[:,3])*len_long_L[:]/2)/np.sum(len_long_L[:])
 
-fig7 = plt.figure()
-plt.imshow(line_image)
-plt.savefig('longest_lines.png')
+# Line functions for L and R
+bR = midpoint_R[1]-average_slope_R*midpoint_R[0]
+bL = midpoint_L[1]-average_slope_L*midpoint_L[0] 
+
+xR = range(0,xsize)
+yR = average_slope_R*xR+bR
+xL = range(0,xsize)
+yL = average_slope_L*xL+bL
+
+
+
+#longest_lines = np.concatenate((longest_lines_R, longest_lines_L), axis=0)
+#sahpe = longest_lines.shape
+#linnes = longest_lines.reshape(sahpe[0],1,sahpe[1])
+#line_image = draw_lines(image, linnes)
+#
+#fig7 = plt.figure()
+#plt.imshow(line_image)
+#plt.savefig('longest_lines.png')
+
+
+
+
 ## Test on videos
 ## TO DO
 #
