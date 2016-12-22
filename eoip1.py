@@ -224,11 +224,15 @@ midpoint_L[1] = np.sum((longest_lines_L[:,1]+longest_lines_L[:,3])*len_long_L[:]
 bR = midpoint_R[1]-average_slope_R*midpoint_R[0]
 bL = midpoint_L[1]-average_slope_L*midpoint_L[0] 
 
-xR = range(0,xsize)
+xR = np.arange(xsize)
 yR = average_slope_R*xR+bR
-xL = range(0,xsize)
-yL = average_slope_L*xL+bL
+lineR = np.concatenate((xR,yR), axis=1)
 
+xL = np.arange(xsize)
+yL = average_slope_L*xL+bL
+lineL = np.concatenate((xL,yL), axis=1)
+
+yL_mod = yL[yL<320]
 
 
 #longest_lines = np.concatenate((longest_lines_R, longest_lines_L), axis=0)
