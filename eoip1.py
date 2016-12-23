@@ -3,15 +3,17 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import cv2
+
+
 #from IPython import get_ipython
 #get_ipython().run_line_magic('matplotlib', 'inline')
 # %matplotlib inline
 
 #reading in an image
-image = mpimg.imread('test_images/solidWhiteRight.jpg')
+image = mpimg.imread('test_images/whiteCarLaneSwitch.jpg')
 #printing out some stats and plotting
 print('This image is:', type(image), 'with dimesions:', image.shape)
-plt.imshow(image)  # if you wanted to show a single color channel image called 'gray', for example, call as plt.imshow(gray, cmap='gray')
+#plt.imshow(image)  # if you wanted to show a single color channel image called 'gray', for example, call as plt.imshow(gray, cmap='gray')
 
 import math
 
@@ -58,7 +60,7 @@ def region_of_interest(img, vertices):
     return masked_image
 
 
-def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
+def draw_lines(img, lines, color, thickness):
     """
     NOTE: this is the function you might want to use as a starting point once you want to 
     average/extrapolate the line segments you detect to map out the full
@@ -106,17 +108,17 @@ def weighted_img(img, initial_img, α=0.8, β=1., λ=0.):
     """
     return cv2.addWeighted(initial_img, α, img, β, λ)
     
-def mask_pixels(x,y, vertices):
-    fit_top = np.polyfit((vertices[1][0], vertices[2][0]), (vertices[1][1], vertices[2][1]), 1)
-    fit_left = np.polyfit((vertices[0][0], vertices[1][0]), (vertices[0][1], vertices[1][1]), 1)
-    fit_right = np.polyfit((vertices[3][0], vertices[2][0]), (vertices[3][1], vertices[2][1]), 1)
-    fit_bottom = np.polyfit((vertices[0][0], vertices[3][0]), (vertices[0][1], vertices[3][1]), 1)
-    
-    XX, YY = np.meshgrid(np.arange(0, xsize), np.arange(0, ysize))
-    region_thresholds = (YY > (XX*fit_top[0] + fit_top[1])) & \
-                        (YY > (XX*fit_left[0] + fit_left[1])) & \
-                        (YY > (XX*fit_right[0] + fit_right[1])) & \
-                        (YY < (XX*fit_bottom[0] + fit_bottom[1]))    
+#def mask_pixels(x,y, vertices):
+#    fit_top = np.polyfit((vertices[1][0], vertices[2][0]), (vertices[1][1], vertices[2][1]), 1)
+#    fit_left = np.polyfit((vertices[0][0], vertices[1][0]), (vertices[0][1], vertices[1][1]), 1)
+#    fit_right = np.polyfit((vertices[3][0], vertices[2][0]), (vertices[3][1], vertices[2][1]), 1)
+#    fit_bottom = np.polyfit((vertices[0][0], vertices[3][0]), (vertices[0][1], vertices[3][1]), 1)
+#    
+#    XX, YY = np.meshgrid(np.arange(0, xsize), np.arange(0, ysize))
+#    region_thresholds = (YY > (XX*fit_top[0] + fit_top[1])) & \
+#                        (YY > (XX*fit_left[0] + fit_left[1])) & \
+#                        (YY > (XX*fit_right[0] + fit_right[1])) & \
+#                        (YY < (XX*fit_bottom[0] + fit_bottom[1]))    
 
 import os
 os.listdir("test_images/")
@@ -125,114 +127,154 @@ os.listdir("test_images/")
 
 # Test on images
 # TO DO
-gray = grayscale(image)
-blur_gray = gaussian_blur(image,5)
-edges = canny(blur_gray, 50, 150)
+def process_image(image):
+    gray = grayscale(image)
+    blur_gray = gaussian_blur(gray,5)
+    edges = canny(blur_gray, 50, 150)
+    
+    region_select = np.copy(edges)
+    
+    ysize = edges.shape[0]
+    xsize = edges.shape[1]
+    margin = 50.0
+    
+    left_bottom = [0, ysize]
+    right_bottom = [xsize, ysize]
+    right_top = [xsize/2+margin,320]
+    left_top = [xsize/2-margin,320]
+    
+    vertices = np.array([[left_bottom,left_top, right_top, right_bottom]], dtype=np.int32)
+    
+    region = region_of_interest(image,vertices)
+    fig3 = plt.figure()
+    plt.imshow(region)
+    
+    
+    region_select = region_of_interest(region_select,vertices)
+    fig4 = plt.figure()
+    plt.imshow(region_select, cmap='Greys_r')
+    plt.savefig('dashed_line.png')
+    
+    lines = hough_lines(region_select, 2, 1*np.pi/180, 20, 2, 2)
+    line_image = draw_lines(image, lines,[255, 0, 0],2)
+    
+    fig5 = plt.figure()
+    plt.imshow(line_image)
+    
+    combo = weighted_img(line_image, image)
+    
+    fig6 = plt.figure()
+    plt.imshow(combo)
+    plt.savefig('image_test.png')
+    
+    lines = np.squeeze(lines)
+    slope = (lines[:,3]-lines[:,1]) / (lines[:,2] - lines[:,0])
+    # line_size = np.sqrt((lines[:,2] - lines[:,0])**2 + (lines[:,3]-lines[:,1])**2)
+    
+    # Eliminate horizontal lines
+    
+    tol = 0.2 # tolerance to determine and eliminate horizontal lines
+    index = np.abs(slope)>tol
+    lines = lines[index]
+    slope = (lines[:,3]-lines[:,1]) / (lines[:,2] - lines[:,0])
+    line_size = np.sqrt((lines[:,2] - lines[:,0])**2 + (lines[:,3]-lines[:,1])**2)
+    
+    #sahpe = lines.shape
+    #print(sahpe[0], sahpe[1])
+    #linnes = lines.reshape(sahpe[0],1,sahpe[1])
+    #line_image = draw_lines(image, linnes)
+    #
+    #fig7 = plt.figure()
+    #plt.imshow(line_image)
+    
+    # Separate Right and Left lanes
+    lines_right = lines[slope>0]
+    lines_left = lines[slope<0]
+    slope_right = slope[slope>0]
+    slope_left = slope[slope<0]
+    line_size_R = line_size[slope>0]
+    line_size_L = line_size[slope<0]
+    
+    # Average the slopes & longest lines
+    index_lensort_right = np.argsort(line_size_R) #be aware that this sorts ascending! 
+    index_lensort_left = np.argsort(line_size_L)
+    inlen_slope_R = slope_right[index_lensort_right]
+    inlen_slope_L = slope_left[index_lensort_left]
+    
+    threshold_length = 6
+    average_slope_R = inlen_slope_R[-threshold_length::].mean()
+    average_slope_L = inlen_slope_L[-threshold_length::].mean()
+    
+    
+    longest = 6
+    longest_lines_index_L = index_lensort_left[-longest:]
+    longest_lines_index_R = index_lensort_right[-longest:]
+    
+    longest_lines_R = lines_right[longest_lines_index_R]
+    longest_lines_L = lines_left[longest_lines_index_L]
+    len_long_R = line_size_R[longest_lines_index_R]
+    len_long_L = line_size_L[longest_lines_index_L]
+    
+    # midpooints in L and R
+    midpoint_R = np.zeros(2)
+    midpoint_L = np.zeros(2)
+    midpoint_R[0] = np.sum((longest_lines_R[:,0]+longest_lines_R[:,2])*len_long_R[:]/2)/np.sum(len_long_R[:])
+    midpoint_R[1] = np.sum((longest_lines_R[:,1]+longest_lines_R[:,3])*len_long_R[:]/2)/np.sum(len_long_R[:])
+    midpoint_L[0] = np.sum((longest_lines_L[:,0]+longest_lines_L[:,2])*len_long_L[:]/2)/np.sum(len_long_L[:])
+    midpoint_L[1] = np.sum((longest_lines_L[:,1]+longest_lines_L[:,3])*len_long_L[:]/2)/np.sum(len_long_L[:])
+    
+    # Line functions for L and R
+    bR = midpoint_R[1]-average_slope_R*midpoint_R[0]
+    bL = midpoint_L[1]-average_slope_L*midpoint_L[0] 
+    
+    xR = np.arange(xsize)
+    yR = average_slope_R*xR+bR
+    # lineL = np.concatenate((xL,yL), axis=1)
+    
+    xL = np.arange(xsize)
+    yL = average_slope_L*xL+bL
+    # lineL = np.concatenate((xL,yL), axis=1)
+    
+    yL_mod2 = yL[yL>320]
+    yL_mod = yL_mod2[yL_mod2<ysize]
+    yL_max = int(np.max(yL_mod))
+    xL_max = int((yL_max-bL)/average_slope_L)
+    yL_min = int(np.min(yL_mod))
+    xL_min = int((yL_min-bL)/average_slope_L)
+    
+    yR_mod2 = yR[yR>320]
+    yR_mod = yR_mod2[yR_mod2<ysize]
+    yR_max = int(np.max(yR_mod))
+    xR_max = int((yR_max-bR)/average_slope_R)
+    yR_min = int(np.min(yR_mod))
+    xR_min = int((yR_min-bR)/average_slope_R)
+    
+    lines_final = np.array([[xL_min, yL_min, xL_max, yL_max], 
+                      [xR_min, yR_min, xR_max, yR_max]])
+    lines = lines_final.reshape(lines_final.shape[0],1,lines_final.shape[1])
+            
+    line_img = draw_lines(image, lines, [255,0,0], 10)
+    final_img = weighted_img(image,line_img)
+    
+    fig7 = plt.figure()
+    plt.imshow(final_img)
+    
+    return final_img
+    
+from moviepy.editor import VideoFileClip
+from IPython.display import HTML
 
-region_select = np.copy(edges)
+process_image(image)
 
-ysize = edges.shape[0]
-xsize = edges.shape[1]
-margin = 50.0
+white_output = 'white.mp4'
+clip1 = VideoFileClip("solidWhiteRight.mp4")
+white_clip = clip1.fl_image(process_image) #NOTE: this function expects color images!!
 
-left_bottom = [0, ysize]
-right_bottom = [xsize, ysize]
-right_top = [xsize/2+margin,320]
-left_top = [xsize/2-margin,320]
-
-vertices = np.array([[left_bottom,left_top, right_top, right_bottom]], dtype=np.int32)
-
-region = region_of_interest(image,vertices)
-fige = plt.figure()
-plt.imshow(region)
-
-
-region_select = region_of_interest(region_select,vertices)
-fig4 = plt.figure()
-plt.imshow(region_select, cmap='Greys_r')
-plt.savefig('dashed_line.png')
-
-lines = hough_lines(region_select, 2, 1*np.pi/180, 20, 2, 2)
-line_image = draw_lines(image, lines)
-
-fig5 = plt.figure()
-plt.imshow(line_image)
-
-combo = weighted_img(line_image, image)
-
-fig6 = plt.figure()
-plt.imshow(combo)
-plt.savefig('image_test.png')
-
-lines = np.squeeze(lines)
-slope = (lines[:,3]-lines[:,1]) / (lines[:,2] - lines[:,0])
-# line_size = np.sqrt((lines[:,2] - lines[:,0])**2 + (lines[:,3]-lines[:,1])**2)
-
-# Eliminate horizontal lines
-
-tol = 0.2 # tolerance to determine and eliminate horizontal lines
-index = np.abs(slope)>tol
-lines = lines[index]
-slope = (lines[:,3]-lines[:,1]) / (lines[:,2] - lines[:,0])
-line_size = np.sqrt((lines[:,2] - lines[:,0])**2 + (lines[:,3]-lines[:,1])**2)
-
-#sahpe = lines.shape
-#print(sahpe[0], sahpe[1])
-#linnes = lines.reshape(sahpe[0],1,sahpe[1])
-#line_image = draw_lines(image, linnes)
-#
-#fig7 = plt.figure()
-#plt.imshow(line_image)
-
-# Separate Right and Left lanes
-lines_right = lines[slope>0]
-lines_left = lines[slope<0]
-slope_right = slope[slope>0]
-slope_left = slope[slope<0]
-line_size_R = line_size[slope>0]
-line_size_L = line_size[slope<0]
-
-# Average the slopes & longest lines
-index_lensort_right = np.argsort(line_size_R) #be aware that this sorts ascending! 
-index_lensort_left = np.argsort(line_size_L)
-inlen_slope_R = slope_right[index_lensort_right]
-inlen_slope_L = slope_left[index_lensort_left]
-
-threshold_length = 6
-average_slope_R = inlen_slope_R[-threshold_length::].mean()
-average_slope_L = inlen_slope_L[-threshold_length::].mean()
-
-
-longest = 6
-longest_lines_index_L = index_lensort_left[-longest:]
-longest_lines_index_R = index_lensort_right[-longest:]
-
-longest_lines_R = lines_right[longest_lines_index_R]
-longest_lines_L = lines_left[longest_lines_index_L]
-len_long_R = line_size_R[longest_lines_index_R]
-len_long_L = line_size_L[longest_lines_index_L]
-
-# midpooints in L and R
-midpoint_R = np.zeros(2)
-midpoint_L = np.zeros(2)
-midpoint_R[0] = np.sum((longest_lines_R[:,0]+longest_lines_R[:,2])*len_long_R[:]/2)/np.sum(len_long_R[:])
-midpoint_R[1] = np.sum((longest_lines_R[:,1]+longest_lines_R[:,3])*len_long_R[:]/2)/np.sum(len_long_R[:])
-midpoint_L[0] = np.sum((longest_lines_L[:,0]+longest_lines_L[:,2])*len_long_L[:]/2)/np.sum(len_long_L[:])
-midpoint_L[1] = np.sum((longest_lines_L[:,1]+longest_lines_L[:,3])*len_long_L[:]/2)/np.sum(len_long_L[:])
-
-# Line functions for L and R
-bR = midpoint_R[1]-average_slope_R*midpoint_R[0]
-bL = midpoint_L[1]-average_slope_L*midpoint_L[0] 
-
-xR = np.arange(xsize)
-yR = average_slope_R*xR+bR
-lineR = np.concatenate((xR,yR), axis=1)
-
-xL = np.arange(xsize)
-yL = average_slope_L*xL+bL
-lineL = np.concatenate((xL,yL), axis=1)
-
-yL_mod = yL[yL<320]
+HTML("""
+<video width="960" height="540" controls>
+  <source src="{0}">
+</video>
+""".format(white_output))
 
 
 #longest_lines = np.concatenate((longest_lines_R, longest_lines_L), axis=0)
